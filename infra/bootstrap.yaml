@@ -1,0 +1,77 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: GitHub Actions OIDC provider and deploy role for fair-select
+
+Parameters:
+  GitHubOrg:
+    Type: String
+    Default: limeng0427
+  GitHubRepo:
+    Type: String
+    Default: fair-select
+
+Resources:
+  # GitHub OIDC provider already exists in this account — reference it directly
+  GitHubDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: fair-select-github-deploy
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubOrg}/${GitHubRepo}:*
+      Policies:
+        - PolicyName: fair-select-deploy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: cloudformation:*
+                Resource: !Sub arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/fair-select-app/*
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:GetObject
+                  - s3:ListBucket
+                  - s3:GetBucketLocation
+                Resource:
+                  - arn:aws:s3:::fair-select-kotahirau-com
+                  - arn:aws:s3:::fair-select-kotahirau-com/*
+              - Effect: Allow
+                Action: cloudfront:CreateInvalidation
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - s3:CreateBucket
+                  - s3:PutBucketPolicy
+                  - s3:PutBucketPublicAccessBlock
+                  - s3:GetBucketPolicy
+                  - s3:GetBucketLocation
+                  - cloudfront:CreateDistribution
+                  - cloudfront:UpdateDistribution
+                  - cloudfront:GetDistribution
+                  - cloudfront:GetDistributionConfig
+                  - cloudfront:CreateOriginAccessControl
+                  - cloudfront:GetOriginAccessControl
+                  - cloudfront:TagResource
+                  - route53:ChangeResourceRecordSets
+                  - route53:GetChange
+                  - route53:ListHostedZones
+                  - acm:DescribeCertificate
+                  - acm:ListCertificates
+                  - iam:PassRole
+                Resource: "*"
+
+Outputs:
+  DeployRoleArn:
+    Value: !GetAtt GitHubDeployRole.Arn
+    Export:
+      Name: fair-select-deploy-role-arn
