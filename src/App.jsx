@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Box,
   Button,
@@ -47,6 +47,7 @@ const DEFAULT_OPTS = {
   removeAfterSelected: true,
   allowDuplicates: false,
   saveToLocalStorage: true,
+  biggerSelectDisplay: false,
   theme: 'standard',
 }
 
@@ -68,6 +69,10 @@ export default function App() {
   const [optsOpen, setOptsOpen] = useState(false)
   const [confirmReset, setConfirmReset] = useState(false)
   const [opts, setOpts] = useState({ ...DEFAULT_OPTS, ...(saved?.opts ?? {}) })
+  const [typewriterText, setTypewriterText] = useState('')
+  const [typewriterDone, setTypewriterDone] = useState(false)
+  const typewriterRef = useRef(null)
+  const [biggerDisplayOpen, setBiggerDisplayOpen] = useState(false)
 
   useEffect(() => {
     if (!opts.saveToLocalStorage) {
@@ -80,6 +85,25 @@ export default function App() {
       JSON.stringify({ people, previouslySelected, selected, opts, prevOpen }),
     )
   }, [people, previouslySelected, selected, opts, prevOpen])
+
+  useEffect(() => {
+    if (opts.theme !== 'typewriter' || animating || !selected) return
+    clearTimeout(typewriterRef.current)
+    setTypewriterText('')
+    setTypewriterDone(false)
+    let i = 0
+    function typeNext() {
+      i++
+      setTypewriterText(selected.slice(0, i))
+      if (i < selected.length) {
+        typewriterRef.current = setTimeout(typeNext, 80)
+      } else {
+        setTypewriterDone(true)
+      }
+    }
+    typewriterRef.current = setTimeout(typeNext, 300)
+    return () => clearTimeout(typewriterRef.current)
+  }, [selected, animating, opts.theme])
 
   function toggleOpt(key) {
     setOpts((prev) => ({ ...prev, [key]: !prev[key] }))
@@ -117,6 +141,7 @@ export default function App() {
       ? people
       : people.filter((p) => !previouslySelected.includes(p))
     if (pool.length === 0) return
+    if (opts.biggerSelectDisplay) setBiggerDisplayOpen(true)
     const pick = pool[Math.floor(Math.random() * pool.length)]
     const rand = () => pool[Math.floor(Math.random() * pool.length)]
 
@@ -301,57 +326,100 @@ export default function App() {
           </Box>
 
           {/* Result */}
-          {selected && opts.theme === 'slot-machine' ? (
-            <Box sx={{
-              background: '#1a1035',
-              border: animating ? '3px solid #444' : '3px solid #f9ca24',
-              borderRadius: 3,
-              p: 1.5,
-              textAlign: 'center',
-              boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.6)',
-              animation: !animating ? 'winner-glow 1.6s ease-in-out infinite' : 'none',
-            }}>
-              <Typography sx={{ fontSize: '1rem', letterSpacing: '0.15em', color: '#666', mb: 0.75 }}>
-                🎰
-              </Typography>
-              <Box sx={{ display: 'flex', gap: '6px' }}>
-                {reels.map((reel, i) => (
-                  <Box key={i} sx={{ flex: 1, minWidth: 0 }} className={i === 1 ? 'slot-reel--center' : ''}>
-                    <div className="slot-viewport">
-                      <div className="slot-line slot-line--top" />
-                      <div className="slot-line slot-line--bottom" />
-                      <span key={reel.tick} className="slot-name">{reel.name}</span>
-                    </div>
-                  </Box>
-                ))}
-              </Box>
-              {!animating && (
-                <Typography sx={{
-                  mt: 0.75,
-                  fontSize: '0.88rem',
-                  fontWeight: 700,
-                  color: '#f9ca24',
-                  letterSpacing: '0.06em',
-                  textShadow: '0 0 8px rgba(249,202,36,0.6)',
-                }}>
-                  🎉 {selected}
-                </Typography>
+          {selected && (
+            <>
+              {opts.biggerSelectDisplay && biggerDisplayOpen && (
+                <Box
+                  onClick={() => { if (!animating) setBiggerDisplayOpen(false) }}
+                  sx={{
+                    position: 'fixed', inset: 0, bgcolor: 'rgba(0,0,0,0.65)', zIndex: 1200,
+                    cursor: animating ? 'default' : 'pointer',
+                    display: 'flex', alignItems: 'flex-end', justifyContent: 'center', pb: 6,
+                  }}
+                >
+                  {!animating && (
+                    <Typography sx={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.8rem', letterSpacing: '0.08em', userSelect: 'none' }}>
+                      click to dismiss
+                    </Typography>
+                  )}
+                </Box>
               )}
-            </Box>
-          ) : selected ? (
-            <Paper elevation={0} sx={{
-              background: 'linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%)',
-              border: '2px solid #f9ca24',
-              borderRadius: 3,
-              p: 2,
-              textAlign: 'center',
-              color: '#5a3e00',
-              animation: animating ? 'pulse-scale 0.2s ease-in-out infinite' : 'none',
-            }}>
-              <Typography component="span" sx={{ fontWeight: 600 }}>Selected:</Typography>{' '}
-              <Typography component="span" sx={{ fontWeight: 700, fontSize: '1.3rem' }}>🎉 {selected}</Typography>
-            </Paper>
-          ) : null}
+              <Box sx={opts.biggerSelectDisplay && biggerDisplayOpen ? {
+                position: 'fixed',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%) scale(1.6)',
+                zIndex: 1300,
+                width: 420,
+              } : {}}>
+                {opts.theme === 'typewriter' ? (
+                  <Box className="typewriter-result" sx={{ animation: animating ? 'pulse-scale 0.2s ease-in-out infinite' : 'none' }}>
+                    {!animating && <Typography className="typewriter-label">Selected</Typography>}
+                    <Typography className="typewriter-name">
+                      {animating ? selected : typewriterText}
+                      <span className={`typewriter-cursor${typewriterDone ? ' typewriter-cursor--blink' : ''}`}>|</span>
+                    </Typography>
+                  </Box>
+                ) : opts.theme === 'retro-arcade' ? (
+                  <Box className="arcade-result" sx={{ animation: animating ? 'pulse-scale 0.2s ease-in-out infinite' : 'arcade-flicker 4s infinite' }}>
+                    <Typography className="arcade-label">✦ WINNER ✦</Typography>
+                    <Typography className="arcade-name">{selected}</Typography>
+                    {!animating && <Typography className="arcade-cursor">▋</Typography>}
+                  </Box>
+                ) : opts.theme === 'slot-machine' ? (
+                  <Box sx={{
+                    background: '#1a1035',
+                    border: animating ? '3px solid #444' : '3px solid #f9ca24',
+                    borderRadius: 3,
+                    p: 1.5,
+                    textAlign: 'center',
+                    boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.6)',
+                    animation: !animating ? 'winner-glow 1.6s ease-in-out infinite' : 'none',
+                  }}>
+                    <Typography sx={{ fontSize: '1rem', letterSpacing: '0.15em', color: '#666', mb: 0.75 }}>
+                      🎰
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: '6px' }}>
+                      {reels.map((reel, i) => (
+                        <Box key={i} sx={{ flex: 1, minWidth: 0 }} className={i === 1 ? 'slot-reel--center' : ''}>
+                          <div className="slot-viewport">
+                            <div className="slot-line slot-line--top" />
+                            <div className="slot-line slot-line--bottom" />
+                            <span key={reel.tick} className="slot-name">{reel.name}</span>
+                          </div>
+                        </Box>
+                      ))}
+                    </Box>
+                    {!animating && (
+                      <Typography sx={{
+                        mt: 0.75,
+                        fontSize: '0.88rem',
+                        fontWeight: 700,
+                        color: '#f9ca24',
+                        letterSpacing: '0.06em',
+                        textShadow: '0 0 8px rgba(249,202,36,0.6)',
+                      }}>
+                        🎉 {selected}
+                      </Typography>
+                    )}
+                  </Box>
+                ) : (
+                  <Paper elevation={0} sx={{
+                    background: 'linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%)',
+                    border: '2px solid #f9ca24',
+                    borderRadius: 3,
+                    p: 2,
+                    textAlign: 'center',
+                    color: '#5a3e00',
+                    animation: animating ? 'pulse-scale 0.2s ease-in-out infinite' : 'none',
+                  }}>
+                    <Typography component="span" sx={{ fontWeight: 600 }}>Selected:</Typography>{' '}
+                    <Typography component="span" sx={{ fontWeight: 700, fontSize: '1.3rem' }}>🎉 {selected}</Typography>
+                  </Paper>
+                )}
+              </Box>
+            </>
+          )}
 
           {/* Previously Selected */}
           {previouslySelected.length > 0 && (
@@ -441,12 +509,15 @@ export default function App() {
                   >
                     <MenuItem value="standard">🎯 Standard</MenuItem>
                     <MenuItem value="slot-machine">🎰 Slot Machine</MenuItem>
+                    <MenuItem value="retro-arcade">🕹️ Retro Arcade</MenuItem>
+                    <MenuItem value="typewriter">🖊️ Typewriter</MenuItem>
                   </Select>
                 </FormControl>
 
                 <FormGroup>
                   {[
                     ['animation', 'Animation'],
+                    ['biggerSelectDisplay', 'Bigger selecting display'],
                     ['removeAfterSelected', 'Remove after selected'],
                     ['allowDuplicates', 'Allow duplicates'],
                     ['saveToLocalStorage', 'Save to local storage'],
