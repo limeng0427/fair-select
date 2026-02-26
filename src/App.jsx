@@ -620,8 +620,8 @@ export default function App() {
             value={activeTab}
             onChange={(_, v) => {
               setActiveTab(v)
-              if (v === 0) setOpts((prev) => ({ ...prev, mode: 'standard' }))
-              if (v === 1) setOpts((prev) => ({ ...prev, mode: 'prize-giving' }))
+              if (v === 0) { setOpts((prev) => ({ ...prev, mode: 'standard' })); setSelected(null) }
+              if (v === 1) { setOpts((prev) => ({ ...prev, mode: 'prize-giving' })); setSelected(null) }
             }}
             centered
             sx={{ mt: -1, mb: -0.5, '& .MuiTab-root': { fontSize: '0.8rem', minHeight: 40 } }}
