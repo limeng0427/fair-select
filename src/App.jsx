@@ -1043,6 +1043,32 @@ export default function App() {
 
         </Paper>
 
+        {/* Footer */}
+        <Box sx={{ textAlign: 'center', mt: 3, pb: 1 }}>
+          <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.6)', display: 'block', mb: 0.5 }}>
+            © 2026 TL Lab. All rights reserved.
+          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1.5 }}>
+            <Typography
+              component="a"
+              href="/privacy"
+              variant="caption"
+              sx={{ color: 'rgba(255,255,255,0.55)', textDecoration: 'none', '&:hover': { color: 'white' } }}
+            >
+              Privacy
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.35)' }}>·</Typography>
+            <Typography
+              component="a"
+              href="/terms"
+              variant="caption"
+              sx={{ color: 'rgba(255,255,255,0.55)', textDecoration: 'none', '&:hover': { color: 'white' } }}
+            >
+              Terms of Service
+            </Typography>
+          </Box>
+        </Box>
+
         {/* Confirm Reset Dialog */}
         <Dialog open={confirmReset} onClose={() => setConfirmReset(false)}>
           <DialogContent>
