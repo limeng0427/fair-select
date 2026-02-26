@@ -592,11 +592,11 @@ export default function App() {
       <Box sx={{
         minHeight: '100vh',
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        flexDirection: 'column',
         background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
         p: { xs: 2, sm: 4 },
       }}>
+        <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <Paper elevation={8} sx={{
           borderRadius: 4,
           p: { xs: 3, sm: 4 },
@@ -1042,9 +1042,10 @@ export default function App() {
           )}
 
         </Paper>
+        </Box>
 
         {/* Footer */}
-        <Box sx={{ textAlign: 'center', mt: 3, pb: 1 }}>
+        <Box sx={{ textAlign: 'center', pt: 3, pb: 1 }}>
           <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.6)', display: 'block', mb: 0.5 }}>
             © 2026 TL Lab. All rights reserved.
           </Typography>
