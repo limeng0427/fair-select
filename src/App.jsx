@@ -340,6 +340,7 @@ export default function App() {
   const [typewriterText, setTypewriterText] = useState('')
   const [typewriterDone, setTypewriterDone] = useState(false)
   const typewriterRef = useRef(null)
+  const skipRef = useRef(false)
   const [biggerDisplayOpen, setBiggerDisplayOpen] = useState(false)
   const [prizeResults, setPrizeResults] = useState(
     (saved?.prizeResults ?? []).filter((r) => r.prize),
@@ -501,8 +502,10 @@ export default function App() {
 
     if (opts.biggerSelectDisplay) setBiggerDisplayOpen(true)
     const rand = () => pool[Math.floor(Math.random() * pool.length)]
+    skipRef.current = false
 
     function finish() {
+      skipRef.current = false
       if (opts.mode === 'prize-giving') {
         const awarded = new Set(prizeResults.map((r) => r.prizeId).filter(Boolean))
         const nextPrize = opts.prizes.slice().reverse().find((p) => !awarded.has(p.id))
@@ -531,6 +534,11 @@ export default function App() {
       if (opts.theme === 'slot-machine') {
         setReels([{ tick: 0, name: rand() }, { tick: 0, name: rand() }, { tick: 0, name: rand() }])
         function cycleSM() {
+          if (skipRef.current) {
+            setReels([{ tick: step, name: pick }, { tick: step, name: pick }, { tick: step, name: pick }])
+            finish()
+            return
+          }
           step++
           const delay = 60 + (step / steps) ** 2 * 240
           setReels((prev) => [
@@ -544,6 +552,10 @@ export default function App() {
         cycleSM()
       } else {
         function cycle() {
+          if (skipRef.current) {
+            finish()
+            return
+          }
           if (step < steps) {
             setSlotTick((t) => t + 1)
             setSelected(rand())
@@ -558,6 +570,15 @@ export default function App() {
     } else {
       finish()
     }
+  }
+
+  function handleSkip() {
+    if (!animating) return
+    if (opts.theme === 'fortune-wheel') {
+      handleWheelFinish()
+      return
+    }
+    skipRef.current = true
   }
 
   function handleKeyDown(e) {
@@ -759,7 +780,7 @@ export default function App() {
           </Box>
 
           {/* Select / Spin button */}
-          <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
             <Button
               variant="contained"
               size="large"
@@ -777,6 +798,15 @@ export default function App() {
             >
               {selectLabel}
             </Button>
+            {animating && (
+              <Button
+                size="small"
+                onClick={handleSkip}
+                sx={{ color: 'text.secondary', textTransform: 'none', fontSize: '0.75rem' }}
+              >
+                ⏭ Skip animation
+              </Button>
+            )}
           </Box>
 
           {/* Result */}
