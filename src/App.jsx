@@ -611,6 +611,9 @@ export default function App() {
           <Typography variant="h5" sx={{ fontWeight: 700, textAlign: 'center', color: '#4c3a8e', letterSpacing: '0.03em' }}>
             ✦ {title} ✦
           </Typography>
+          <Typography variant="body2" sx={{ textAlign: 'center', color: '#7a6aaa', mt: -1.5 }}>
+            Your customized random person picker and draw selector
+          </Typography>
 
           {/* Tabs */}
           <Tabs
@@ -789,7 +792,7 @@ export default function App() {
               >
                 {!animating && (
                   <Typography sx={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.8rem', letterSpacing: '0.08em', userSelect: 'none' }}>
-                    click to back to main window
+                    Click everywhere to go back to the main window.
                   </Typography>
                 )}
               </Box>
