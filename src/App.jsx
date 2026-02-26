@@ -627,7 +627,7 @@ export default function App() {
             sx={{ mt: -1, mb: -0.5, '& .MuiTab-root': { fontSize: '0.8rem', minHeight: 40 } }}
           >
             <Tab label="🎯 Standard" />
-            <Tab label="🏆 Prize Giving" />
+            <Tab label="🏆 Prize Draw" />
             <Tab label="⚙ Settings" />
           </Tabs>
 
