@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useTheme, useMediaQuery } from '@mui/material'
 import {
   Box,
   Button,
@@ -34,6 +35,7 @@ import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import EditIcon from '@mui/icons-material/Edit'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import LockIcon from '@mui/icons-material/Lock'
+import SettingsIcon from '@mui/icons-material/Settings'
 import { DndContext, closestCenter } from '@dnd-kit/core'
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -303,6 +305,8 @@ function SortablePrizeRow({ prize, onLabelChange, onEmojiChange, onDelete }) {
 
 export default function App() {
   const saved = loadSaved()
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'))
 
   const [peopleLists, setPeopleLists] = useState(() => {
     if (saved?.peopleLists) return saved.peopleLists
@@ -649,7 +653,11 @@ export default function App() {
           >
             <Tab label="🎯 Standard" />
             <Tab label="🏆 Prize Draw" />
-            <Tab label="⚙ Settings" />
+            <Tab
+              icon={isMobile ? <SettingsIcon fontSize="small" /> : undefined}
+              label={isMobile ? undefined : '⚙ Settings'}
+              aria-label="Settings"
+            />
           </Tabs>
 
           {/* ── Main content (tabs 0-1) ── */}
