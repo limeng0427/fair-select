@@ -35,7 +35,6 @@ import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import EditIcon from '@mui/icons-material/Edit'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import LockIcon from '@mui/icons-material/Lock'
-import SettingsIcon from '@mui/icons-material/Settings'
 import { DndContext, closestCenter } from '@dnd-kit/core'
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -345,6 +344,7 @@ export default function App() {
   const [typewriterDone, setTypewriterDone] = useState(false)
   const typewriterRef = useRef(null)
   const skipRef = useRef(false)
+  const pendingWheelRemovalRef = useRef(null)
   const [biggerDisplayOpen, setBiggerDisplayOpen] = useState(false)
   const [prizeResults, setPrizeResults] = useState(
     (saved?.prizeResults ?? []).filter((r) => r.prize),
@@ -473,16 +473,51 @@ export default function App() {
     setSelected(null)
   }
 
-  function handleWheelFinish() {
-    const pick = wheelSpinTarget.pick
-    setSelected(pick)
-    setAnimating(false)
-    setWheelSpinTarget((prev) => ({ ...prev, spinning: false }))
+  function applyWheelRemoval(pick) {
     if (opts.removeAfterSelected) {
       setPeople((prev) => prev.filter((p) => p !== pick))
       setPreviouslySelected((prev) => [...prev, pick])
     } else if (!opts.allowDuplicates) {
       setPreviouslySelected((prev) => [...prev, pick])
+    }
+  }
+
+  function closeBiggerDisplay() {
+    if (pendingWheelRemovalRef.current) {
+      const pick = pendingWheelRemovalRef.current
+      if (opts.mode === 'prize-giving') {
+        // Prize mode: person was already recorded in prizeResults; just remove from pool
+        setPeople((prev) => prev.filter((p) => p !== pick))
+      } else {
+        applyWheelRemoval(pick)
+      }
+      pendingWheelRemovalRef.current = null
+    }
+    setBiggerDisplayOpen(false)
+  }
+
+  function handleWheelFinish() {
+    const pick = wheelSpinTarget.pick
+    setSelected(pick)
+    setAnimating(false)
+    setWheelSpinTarget((prev) => ({ ...prev, spinning: false }))
+
+    if (opts.mode === 'prize-giving') {
+      // Record prize result immediately (same as finish() for other themes)
+      const awarded = new Set(prizeResults.map((r) => r.prizeId).filter(Boolean))
+      const nextPrize = opts.prizes.slice().reverse().find((p) => !awarded.has(p.id))
+      if (nextPrize) {
+        setPrizeResults((prev) => [...prev, { name: pick, prizeId: nextPrize.id, prize: { emoji: nextPrize.emoji, label: nextPrize.label } }])
+      }
+      // Defer people removal so winner stays on wheel until display closes
+      pendingWheelRemovalRef.current = pick
+      return
+    }
+
+    if (biggerDisplayOpen) {
+      pendingWheelRemovalRef.current = pick
+    } else {
+      applyWheelRemoval(pick)
     }
   }
 
@@ -636,9 +671,11 @@ export default function App() {
           <Typography variant="h5" sx={{ fontWeight: 700, textAlign: 'center', color: '#4c3a8e', letterSpacing: '0.03em' }}>
             ✦ {title} ✦
           </Typography>
-          <Typography variant="body2" sx={{ textAlign: 'center', color: '#7a6aaa', mt: -1.5 }}>
-            Your customized random person picker and draw selector
-          </Typography>
+          {!slug && (
+            <Typography variant="body2" sx={{ textAlign: 'center', color: '#7a6aaa', mt: -1.5 }}>
+              Your customized random person picker and draw selector
+            </Typography>
+          )}
 
           {/* Tabs */}
           <Tabs
@@ -648,16 +685,15 @@ export default function App() {
               if (v === 0) { setOpts((prev) => ({ ...prev, mode: 'standard' })); setSelected(null) }
               if (v === 1) { setOpts((prev) => ({ ...prev, mode: 'prize-giving' })); setSelected(null) }
             }}
-            centered
+            variant={isMobile ? 'scrollable' : 'standard'}
+            centered={!isMobile}
+            scrollButtons="auto"
+            allowScrollButtonsMobile
             sx={{ mt: -1, mb: -0.5, '& .MuiTab-root': { fontSize: '0.8rem', minHeight: 40 } }}
           >
             <Tab label="🎯 Standard" />
             <Tab label="🏆 Prize Draw" />
-            <Tab
-              icon={isMobile ? <SettingsIcon fontSize="small" /> : undefined}
-              label={isMobile ? undefined : '⚙ Settings'}
-              aria-label="Settings"
-            />
+            <Tab label="⚙ Settings" />
           </Tabs>
 
           {/* ── Main content (tabs 0-1) ── */}
@@ -729,6 +765,34 @@ export default function App() {
             </Paper>
           )}
 
+          {/* Current prize banner */}
+          {isPrizeMode && (
+            <Box sx={{
+              textAlign: 'center',
+              borderRadius: 3,
+              py: 1.5,
+              px: 2,
+              background: allPrizesGiven
+                ? 'linear-gradient(135deg, #d4f8e8 0%, #b2f0d8 100%)'
+                : 'linear-gradient(135deg, #f5f0ff 0%, #ede0ff 100%)',
+              border: allPrizesGiven ? '1.5px solid #6fcf97' : '1.5px solid #c4a8f8',
+            }}>
+              {allPrizesGiven ? (
+                <Typography sx={{ fontWeight: 700, color: '#27ae60', fontSize: '1rem' }}>
+                  🎉 All prizes awarded!
+                </Typography>
+              ) : currentPrize ? (
+                <>
+                  <Typography variant="caption" sx={{ color: '#7a5acd', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', mb: 0.25 }}>
+                    Now drawing for
+                  </Typography>
+                  <Typography sx={{ fontSize: '1.5rem', lineHeight: 1.2 }}>{currentPrize.emoji}</Typography>
+                  <Typography sx={{ fontWeight: 700, color: '#4a2fa0', fontSize: '1rem' }}>{currentPrize.label}</Typography>
+                </>
+              ) : null}
+            </Box>
+          )}
+
           {/* Input row */}
           <Stack direction="row" spacing={1}>
             <TextField
@@ -756,12 +820,12 @@ export default function App() {
               endIcon={<ExpandMoreIcon sx={{ transform: peopleOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />}
               sx={{ justifyContent: 'space-between', color: 'text.secondary', textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.06em', fontWeight: 600, '&:hover': { bgcolor: 'transparent', color: 'text.primary' } }}
             >
-              People ({people.length})
+              Selection Pool ({people.length})
             </Button>
             <Collapse in={peopleOpen}>
               {people.length === 0 ? (
                 <Typography variant="body2" sx={{ color: 'text.disabled', textAlign: 'center', py: 1 }}>
-                  No people added yet.
+                  No entries added yet.
                 </Typography>
               ) : (
                 <List dense disablePadding sx={{ mt: 0.5 }}>
@@ -821,22 +885,59 @@ export default function App() {
           <>
             {opts.biggerSelectDisplay && biggerDisplayOpen && (
               <Box
-                onClick={() => { if (!animating) setBiggerDisplayOpen(false) }}
+                onClick={() => { if (!animating) closeBiggerDisplay() }}
                 sx={{
                   position: 'fixed', inset: 0, bgcolor: 'rgba(0,0,0,0.65)', zIndex: 1200,
                   cursor: animating ? 'default' : 'pointer',
-                  display: 'flex', alignItems: 'flex-end', justifyContent: 'center', pb: 6,
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between',
+                  pt: 6, pb: 6,
                 }}
               >
+                {/* Current prize indicator */}
+                {isPrizeMode && (
+                  <Box sx={{
+                    textAlign: 'center',
+                    bgcolor: 'rgba(255,255,255,0.12)',
+                    backdropFilter: 'blur(8px)',
+                    border: '1px solid rgba(255,255,255,0.25)',
+                    borderRadius: 3,
+                    px: 4, py: 2,
+                  }}>
+                    {allPrizesGiven ? (
+                      <Typography sx={{ fontWeight: 700, color: '#6fcf97', fontSize: '1.1rem' }}>
+                        🎉 All prizes awarded!
+                      </Typography>
+                    ) : currentPrize ? (
+                      <>
+                        <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', mb: 0.5 }}>
+                          Now drawing for
+                        </Typography>
+                        <Typography sx={{ fontSize: '2.5rem', lineHeight: 1 }}>{currentPrize.emoji}</Typography>
+                        <Typography sx={{ fontWeight: 700, color: 'white', fontSize: '1.2rem', mt: 0.5 }}>{currentPrize.label}</Typography>
+                      </>
+                    ) : null}
+                  </Box>
+                )}
+                {!isPrizeMode && <Box />}
+
                 {!animating && (
-                  <Typography sx={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.8rem', letterSpacing: '0.08em', userSelect: 'none' }}>
-                    Click everywhere to go back to the main window.
+                  <Typography sx={{
+                    color: 'rgba(255,255,255,0.9)',
+                    fontSize: '0.8rem',
+                    letterSpacing: '0.08em',
+                    userSelect: 'none',
+                    bgcolor: 'rgba(0,0,0,0.45)',
+                    px: 2, py: 0.75,
+                    borderRadius: 2,
+                  }}>
+                    Click anywhere to return to the main screen.
                   </Typography>
                 )}
+                {animating && <Box />}
               </Box>
             )}
             <Box
-              onClick={() => { if (opts.biggerSelectDisplay && biggerDisplayOpen && !animating) setBiggerDisplayOpen(false) }}
+              onClick={() => { if (opts.biggerSelectDisplay && biggerDisplayOpen && !animating) closeBiggerDisplay() }}
               sx={opts.biggerSelectDisplay && biggerDisplayOpen ? (isFortuneWheel ? {
                 position: 'fixed', top: '50%', left: '50%',
                 transform: 'translate(-50%, -50%)',
@@ -876,13 +977,15 @@ export default function App() {
                   </Paper>
                 </>
               ) : !selected && !animating ? (
-                <Paper elevation={0} sx={{
-                  background: 'linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%)',
-                  border: '2px solid #f9ca24', borderRadius: 3, p: 2,
-                  textAlign: 'center', color: '#5a3e00',
-                }}>
-                  <Typography sx={{ color: '#9a8040', fontStyle: 'italic' }}>Ready to select…</Typography>
-                </Paper>
+                pool.length > 0 ? (
+                  <Paper elevation={0} sx={{
+                    background: 'linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%)',
+                    border: '2px solid #f9ca24', borderRadius: 3, p: 2,
+                    textAlign: 'center', color: '#5a3e00',
+                  }}>
+                    <Typography sx={{ color: '#9a8040', fontStyle: 'italic' }}>Ready to select…</Typography>
+                  </Paper>
+                ) : null
               ) : opts.theme === 'typewriter' ? (
                 <Box className="typewriter-result" sx={{ animation: animating ? 'pulse-scale 0.2s ease-in-out infinite' : 'none' }}>
                   {!animating && <Typography className="typewriter-label">Selected</Typography>}
@@ -935,9 +1038,9 @@ export default function App() {
                       <Typography component="span" sx={{ fontWeight: 600 }}>Selected:</Typography>{' '}
                       <Typography component="span" sx={{ fontWeight: 700, fontSize: '1.3rem' }}>🎉 {selected}</Typography>
                     </>
-                  ) : (
+                  ) : pool.length > 0 ? (
                     <Typography sx={{ color: '#9a8040', fontStyle: 'italic' }}>Ready to select…</Typography>
-                  )}
+                  ) : null}
                 </Paper>
               )}
 
@@ -957,39 +1060,40 @@ export default function App() {
                 </Stack>
               )}
 
-              {/* ── Prize results list (prize giving mode, all themes) ── */}
-              {isPrizeMode && prizeResults.length > 0 && (
-                <Box className="prize-result" sx={{ mt: 1.5 }}>
-                  {prizeResults.slice().reverse().map((r, i) => (
-                    <Box key={i} className="prize-result-row">
-                      <Typography className="prize-result-medal">{r.prize.emoji}</Typography>
-                      <Box>
-                        <Typography className="prize-result-label">{r.prize.label}</Typography>
-                        <Typography className="prize-result-name">{r.name}</Typography>
-                      </Box>
-                    </Box>
-                  ))}
-                  {allPrizesGiven && (
-                    <Box sx={{ textAlign: 'center', pt: 0.5 }}>
-                      <Typography className="prize-result-done">🎉 All prizes awarded!</Typography>
-                      <Stack direction="row" spacing={1} justifyContent="center" sx={{ mt: 1 }}>
-                        <Tooltip title="Clear all people and results, restore default prizes" arrow>
-                          <Button size="small" variant="outlined" color="error" onClick={handlePrizeReset} sx={{ textTransform: 'none', fontSize: '0.8rem' }}>
-                            Reset
-                          </Button>
-                        </Tooltip>
-                        <Tooltip title="Keep prizes, move everyone back to the people list and draw again" arrow>
-                          <Button size="small" variant="outlined" onClick={handlePrizeRedraw} sx={{ textTransform: 'none', fontSize: '0.8rem', borderColor: '#6a5acd', color: '#6a5acd', '&:hover': { borderColor: '#5548b0', bgcolor: '#f5f0ff' } }}>
-                            Redraw
-                          </Button>
-                        </Tooltip>
-                      </Stack>
-                    </Box>
-                  )}
+            </Box>
+          </>
+
+          {/* ── Prize results list — outside bigger-display Box so it stays visible ── */}
+          {isPrizeMode && prizeResults.length > 0 && (
+            <Box className="prize-result">
+              {prizeResults.slice().reverse().map((r, i) => (
+                <Box key={i} className="prize-result-row">
+                  <Typography className="prize-result-medal">{r.prize.emoji}</Typography>
+                  <Box>
+                    <Typography className="prize-result-label">{r.prize.label}</Typography>
+                    <Typography className="prize-result-name">{r.name}</Typography>
+                  </Box>
+                </Box>
+              ))}
+              {allPrizesGiven && (
+                <Box sx={{ textAlign: 'center', pt: 0.5 }}>
+                  <Typography className="prize-result-done">🎉 All prizes awarded!</Typography>
+                  <Stack direction="row" spacing={1} justifyContent="center" sx={{ mt: 1 }}>
+                    <Tooltip title="Clear all people and results, restore default prizes" arrow>
+                      <Button size="small" variant="outlined" color="error" onClick={handlePrizeReset} sx={{ textTransform: 'none', fontSize: '0.8rem' }}>
+                        Reset
+                      </Button>
+                    </Tooltip>
+                    <Tooltip title="Keep prizes, move everyone back to the people list and draw again" arrow>
+                      <Button size="small" variant="outlined" onClick={handlePrizeRedraw} sx={{ textTransform: 'none', fontSize: '0.8rem', borderColor: '#6a5acd', color: '#6a5acd', '&:hover': { borderColor: '#5548b0', bgcolor: '#f5f0ff' } }}>
+                        Redraw
+                      </Button>
+                    </Tooltip>
+                  </Stack>
                 </Box>
               )}
             </Box>
-          </>
+          )}
 
           {/* Previously Selected (hidden in prize giving mode) */}
           {!isPrizeMode && previouslySelected.length > 0 && (
@@ -1027,7 +1131,7 @@ export default function App() {
 
           {/* ── Settings tab ── */}
           {activeTab === 2 && (
-            <Stack spacing={2}>
+            <Stack spacing={2} sx={{ overflowY: 'auto', maxHeight: { xs: '60vh', md: 'none' }, pt: 1.5 }}>
               <FormControl size="small">
                 <InputLabel>Select Theme</InputLabel>
                 <Select
@@ -1043,7 +1147,7 @@ export default function App() {
                 </Select>
               </FormControl>
 
-              <FormGroup sx={{ gap: 0.75 }}>
+              <FormGroup sx={{ gap: 0.75, pl: 1 }}>
                 {[
                   ['animation', 'Animation'],
                   ['biggerSelectDisplay', 'Bigger selecting display'],
