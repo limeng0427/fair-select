@@ -622,7 +622,7 @@ export default function App() {
           borderRadius: 4,
           p: { xs: 3, sm: 4 },
           width: '100%',
-          maxWidth: 480,
+          maxWidth: { xs: 480, md: 720 },
           display: 'flex',
           flexDirection: 'column',
           gap: 2.5,
