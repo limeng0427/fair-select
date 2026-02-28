@@ -699,70 +699,36 @@ export default function App() {
           {/* ── Main content (tabs 0-1) ── */}
           {activeTab !== 2 && <>
 
-          {/* Prize Setup Box */}
-          {isPrizeMode && (
-            <Paper variant="outlined" sx={{ borderRadius: 2, p: 1.5, borderColor: '#d4c5f9', background: '#f5f0ff' }}>
-              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
-                <Typography variant="caption" sx={{ color: '#6a5acd', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                  🏆 Prizes
-                </Typography>
-                {prizeEditMode ? (
-                  <IconButton size="small" onClick={() => setPrizeEditMode(false)} sx={{ color: '#6a5acd' }}>
-                    <LockIcon fontSize="small" />
-                  </IconButton>
-                ) : (
-                  <IconButton size="small" onClick={() => setPrizeEditMode(true)} sx={{ color: '#6a5acd' }}>
-                    <EditIcon fontSize="small" />
-                  </IconButton>
-                )}
-              </Stack>
-
-              {prizeEditMode ? (
-                <>
-                  <DndContext
-                    collisionDetection={closestCenter}
-                    onDragEnd={({ active, over }) => {
-                      if (active.id !== over?.id) {
-                        const oldIdx = opts.prizes.findIndex((p) => p.id === active.id)
-                        const newIdx = opts.prizes.findIndex((p) => p.id === over.id)
-                        setOpts((prev) => ({ ...prev, prizes: arrayMove(prev.prizes, oldIdx, newIdx) }))
-                      }
-                    }}
-                  >
-                    <SortableContext items={opts.prizes.map((p) => p.id)} strategy={verticalListSortingStrategy}>
-                      <Stack spacing={0.75}>
-                        {opts.prizes.map((prize, i) => (
-                          <SortablePrizeRow
-                            key={prize.id}
-                            prize={prize}
-                            onLabelChange={(e) => updatePrize(i, { label: e.target.value })}
-                            onEmojiChange={(val) => updatePrize(i, { emoji: val })}
-                            onDelete={() => setOpts((prev) => ({ ...prev, prizes: prev.prizes.filter((_, j) => j !== i) }))}
-                          />
-                        ))}
-                      </Stack>
-                    </SortableContext>
-                  </DndContext>
-                  <Button
-                    size="small"
-                    startIcon={<AddIcon />}
-                    onClick={() => setOpts((prev) => ({ ...prev, prizes: [...prev.prizes, { id: `prize-${Date.now()}`, emoji: '⭐', label: 'New Prize' }] }))}
-                    sx={{ mt: 1, color: '#6a5acd', textTransform: 'none' }}
-                  >
-                    Add prize
-                  </Button>
-                </>
-              ) : (
-                <Stack spacing={0.5}>
-                  {opts.prizes.map((prize) => (
-                    <Stack key={prize.id} direction="row" spacing={1} alignItems="center" sx={{ py: 0.25 }}>
-                      <Typography sx={{ fontSize: '1.2rem', lineHeight: 1 }}>{prize.emoji}</Typography>
-                      <Typography sx={{ fontSize: '0.9rem', fontWeight: 500, color: '#3a2d6e' }}>{prize.label}</Typography>
-                    </Stack>
-                  ))}
-                </Stack>
+          {/* ── Prize results list — top of prize draw tab ── */}
+          {isPrizeMode && prizeResults.length > 0 && (
+            <Box className="prize-result">
+              {prizeResults.slice().reverse().map((r, i) => (
+                <Box key={i} className="prize-result-row">
+                  <Typography className="prize-result-medal">{r.prize.emoji}</Typography>
+                  <Box>
+                    <Typography className="prize-result-label">{r.prize.label}</Typography>
+                    <Typography className="prize-result-name">{r.name}</Typography>
+                  </Box>
+                </Box>
+              ))}
+              {allPrizesGiven && (
+                <Box sx={{ textAlign: 'center', pt: 0.5 }}>
+                  <Typography className="prize-result-done">🎉 All prizes awarded!</Typography>
+                  <Stack direction="row" spacing={1} justifyContent="center" sx={{ mt: 1 }}>
+                    <Tooltip title="Clear all people and results, restore default prizes" arrow>
+                      <Button size="small" variant="outlined" color="error" onClick={handlePrizeReset} sx={{ textTransform: 'none', fontSize: '0.8rem' }}>
+                        Reset
+                      </Button>
+                    </Tooltip>
+                    <Tooltip title="Keep prizes, move everyone back to the people list and draw again" arrow>
+                      <Button size="small" variant="outlined" onClick={handlePrizeRedraw} sx={{ textTransform: 'none', fontSize: '0.8rem', borderColor: '#6a5acd', color: '#6a5acd', '&:hover': { borderColor: '#5548b0', bgcolor: '#f5f0ff' } }}>
+                        Redraw
+                      </Button>
+                    </Tooltip>
+                  </Stack>
+                </Box>
               )}
-            </Paper>
+            </Box>
           )}
 
           {/* Current prize banner */}
@@ -1063,36 +1029,69 @@ export default function App() {
             </Box>
           </>
 
-          {/* ── Prize results list — outside bigger-display Box so it stays visible ── */}
-          {isPrizeMode && prizeResults.length > 0 && (
-            <Box className="prize-result">
-              {prizeResults.slice().reverse().map((r, i) => (
-                <Box key={i} className="prize-result-row">
-                  <Typography className="prize-result-medal">{r.prize.emoji}</Typography>
-                  <Box>
-                    <Typography className="prize-result-label">{r.prize.label}</Typography>
-                    <Typography className="prize-result-name">{r.name}</Typography>
-                  </Box>
-                </Box>
-              ))}
-              {allPrizesGiven && (
-                <Box sx={{ textAlign: 'center', pt: 0.5 }}>
-                  <Typography className="prize-result-done">🎉 All prizes awarded!</Typography>
-                  <Stack direction="row" spacing={1} justifyContent="center" sx={{ mt: 1 }}>
-                    <Tooltip title="Clear all people and results, restore default prizes" arrow>
-                      <Button size="small" variant="outlined" color="error" onClick={handlePrizeReset} sx={{ textTransform: 'none', fontSize: '0.8rem' }}>
-                        Reset
-                      </Button>
-                    </Tooltip>
-                    <Tooltip title="Keep prizes, move everyone back to the people list and draw again" arrow>
-                      <Button size="small" variant="outlined" onClick={handlePrizeRedraw} sx={{ textTransform: 'none', fontSize: '0.8rem', borderColor: '#6a5acd', color: '#6a5acd', '&:hover': { borderColor: '#5548b0', bgcolor: '#f5f0ff' } }}>
-                        Redraw
-                      </Button>
-                    </Tooltip>
-                  </Stack>
-                </Box>
+          {/* Prize Setup Box — bottom of prize draw tab */}
+          {isPrizeMode && (
+            <Paper variant="outlined" sx={{ borderRadius: 2, p: 1.5, borderColor: '#d4c5f9', background: '#f5f0ff' }}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+                <Typography variant="caption" sx={{ color: '#6a5acd', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  🏆 Prizes
+                </Typography>
+                {prizeEditMode ? (
+                  <IconButton size="small" onClick={() => setPrizeEditMode(false)} sx={{ color: '#6a5acd' }}>
+                    <LockIcon fontSize="small" />
+                  </IconButton>
+                ) : (
+                  <IconButton size="small" onClick={() => setPrizeEditMode(true)} sx={{ color: '#6a5acd' }}>
+                    <EditIcon fontSize="small" />
+                  </IconButton>
+                )}
+              </Stack>
+              {prizeEditMode ? (
+                <>
+                  <DndContext
+                    collisionDetection={closestCenter}
+                    onDragEnd={({ active, over }) => {
+                      if (active.id !== over?.id) {
+                        const oldIdx = opts.prizes.findIndex((p) => p.id === active.id)
+                        const newIdx = opts.prizes.findIndex((p) => p.id === over.id)
+                        setOpts((prev) => ({ ...prev, prizes: arrayMove(prev.prizes, oldIdx, newIdx) }))
+                      }
+                    }}
+                  >
+                    <SortableContext items={opts.prizes.map((p) => p.id)} strategy={verticalListSortingStrategy}>
+                      <Stack spacing={0.75}>
+                        {opts.prizes.map((prize, i) => (
+                          <SortablePrizeRow
+                            key={prize.id}
+                            prize={prize}
+                            onLabelChange={(e) => updatePrize(i, { label: e.target.value })}
+                            onEmojiChange={(val) => updatePrize(i, { emoji: val })}
+                            onDelete={() => setOpts((prev) => ({ ...prev, prizes: prev.prizes.filter((_, j) => j !== i) }))}
+                          />
+                        ))}
+                      </Stack>
+                    </SortableContext>
+                  </DndContext>
+                  <Button
+                    size="small"
+                    startIcon={<AddIcon />}
+                    onClick={() => setOpts((prev) => ({ ...prev, prizes: [...prev.prizes, { id: `prize-${Date.now()}`, emoji: '⭐', label: 'New Prize' }] }))}
+                    sx={{ mt: 1, color: '#6a5acd', textTransform: 'none' }}
+                  >
+                    Add prize
+                  </Button>
+                </>
+              ) : (
+                <Stack spacing={0.5}>
+                  {opts.prizes.map((prize) => (
+                    <Stack key={prize.id} direction="row" spacing={1} alignItems="center" sx={{ py: 0.25 }}>
+                      <Typography sx={{ fontSize: '1.2rem', lineHeight: 1 }}>{prize.emoji}</Typography>
+                      <Typography sx={{ fontSize: '0.9rem', fontWeight: 500, color: '#3a2d6e' }}>{prize.label}</Typography>
+                    </Stack>
+                  ))}
+                </Stack>
               )}
-            </Box>
+            </Paper>
           )}
 
           {/* Previously Selected (hidden in prize giving mode) */}
