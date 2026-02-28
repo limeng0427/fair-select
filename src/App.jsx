@@ -750,7 +750,7 @@ export default function App() {
               ) : currentPrize ? (
                 <>
                   <Typography variant="caption" sx={{ color: '#7a5acd', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', mb: 0.25 }}>
-                    Now drawing for
+                    Next drawing for
                   </Typography>
                   <Typography sx={{ fontSize: '1.5rem', lineHeight: 1.2 }}>{currentPrize.emoji}</Typography>
                   <Typography sx={{ fontWeight: 700, color: '#4a2fa0', fontSize: '1rem' }}>{currentPrize.label}</Typography>
