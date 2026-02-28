@@ -3,6 +3,7 @@ import { useTheme, useMediaQuery } from '@mui/material'
 import {
   Box,
   Button,
+  Checkbox,
   Switch,
   Collapse,
   CssBaseline,
@@ -42,6 +43,7 @@ import './App.css'
 
 const slug = window.location.pathname.replace(/^\//, '')
 const STORAGE_KEY = `fair-select/${slug || '__root__'}`
+const ADVANCED_KEY = `fair-select-advanced/${slug || '__root__'}`
 
 function loadSaved() {
   try {
@@ -51,6 +53,19 @@ function loadSaved() {
     return null
   }
 }
+
+function loadAdvanced() {
+  try {
+    const raw = localStorage.getItem(ADVANCED_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+
+const DEFAULT_ADVANCED_GROUPS = [
+  { id: 'grp-standard', name: 'Standard' },
+  { id: 'grp-priority', name: 'Priority' },
+  { id: 'grp-special',  name: 'Special'  },
+]
 
 const DEFAULT_PRIZES = [
   { id: 'prize-gold',   emoji: '🥇', label: 'Gold' },
@@ -353,6 +368,21 @@ export default function App() {
   const [wheelSpinTarget, setWheelSpinTarget] = useState(null)
   const [prizeEditMode, setPrizeEditMode] = useState(false)
 
+  // ── Advanced tab state ──────────────────────────────────────────────────────
+  const savedAdv = loadAdvanced()
+  const [advGroups, setAdvGroups] = useState(savedAdv?.groups ?? DEFAULT_ADVANCED_GROUPS)
+  const [advEntries, setAdvEntries] = useState(savedAdv?.entries ?? [])
+  const [advActiveGroupIds, setAdvActiveGroupIds] = useState(
+    savedAdv?.activeGroupIds ?? DEFAULT_ADVANCED_GROUPS.map(g => g.id)
+  )
+  const [advPreviouslySelected, setAdvPreviouslySelected] = useState(savedAdv?.previouslySelected ?? [])
+  const [advSelected, setAdvSelected] = useState(savedAdv?.selected ?? null)
+  const [advInputValue, setAdvInputValue] = useState('')
+  const [advAddGroupId, setAdvAddGroupId] = useState(savedAdv?.groups?.[0]?.id ?? DEFAULT_ADVANCED_GROUPS[0].id)
+  const [advPeopleOpen, setAdvPeopleOpen] = useState(true)
+  const [advPrevOpen, setAdvPrevOpen] = useState(true)
+  const [advGroupEditMode, setAdvGroupEditMode] = useState(false)
+
   // Per-mode people list — derived from current mode
   const people = peopleLists[opts.mode] ?? []
   const setPeople = (updater) => {
@@ -373,6 +403,21 @@ export default function App() {
       JSON.stringify({ peopleLists, previouslySelected, selected, opts, prevOpen, peopleOpen, prizeResults }),
     )
   }, [peopleLists, previouslySelected, selected, opts, prevOpen, peopleOpen, prizeResults])
+
+  useEffect(() => {
+    const data = {
+      groups: advGroups,
+      entries: advEntries,
+      activeGroupIds: advActiveGroupIds,
+      previouslySelected: advPreviouslySelected,
+      selected: advSelected,
+    }
+    if (!opts.saveToLocalStorage) {
+      localStorage.setItem(ADVANCED_KEY, JSON.stringify({ groups: advGroups, entries: advEntries, activeGroupIds: advActiveGroupIds }))
+      return
+    }
+    localStorage.setItem(ADVANCED_KEY, JSON.stringify(data))
+  }, [advGroups, advEntries, advActiveGroupIds, advPreviouslySelected, advSelected, opts.saveToLocalStorage])
 
   useEffect(() => {
     if (opts.theme !== 'typewriter' || animating || !selected) return
@@ -484,12 +529,16 @@ export default function App() {
 
   function closeBiggerDisplay() {
     if (pendingWheelRemovalRef.current) {
-      const pick = pendingWheelRemovalRef.current
-      if (opts.mode === 'prize-giving') {
-        // Prize mode: person was already recorded in prizeResults; just remove from pool
-        setPeople((prev) => prev.filter((p) => p !== pick))
+      const val = pendingWheelRemovalRef.current
+      if (typeof val === 'string') {
+        if (opts.mode === 'prize-giving') {
+          // Prize mode: person was already recorded in prizeResults; just remove from pool
+          setPeople((prev) => prev.filter((p) => p !== val))
+        } else {
+          applyWheelRemoval(val)
+        }
       } else {
-        applyWheelRemoval(pick)
+        val.fn()  // advanced mode callback
       }
       pendingWheelRemovalRef.current = null
     }
@@ -501,6 +550,20 @@ export default function App() {
     setSelected(pick)
     setAnimating(false)
     setWheelSpinTarget((prev) => ({ ...prev, spinning: false }))
+
+    if (isAdvanced) {
+      const doRemove = () => {
+        if (opts.removeAfterSelected) {
+          setAdvEntries(prev => prev.filter(e => e.name !== pick))
+          setAdvPreviouslySelected(prev => [...prev, pick])
+        } else if (!opts.allowDuplicates) {
+          setAdvPreviouslySelected(prev => [...prev, pick])
+        }
+      }
+      if (biggerDisplayOpen) { pendingWheelRemovalRef.current = { pick, fn: doRemove } }
+      else { doRemove() }
+      return
+    }
 
     if (opts.mode === 'prize-giving') {
       // Record prize result immediately (same as finish() for other themes)
@@ -620,6 +683,88 @@ export default function App() {
     skipRef.current = true
   }
 
+  function handleAdvancedAdd() {
+    const names = advInputValue.split(';').map(s => s.trim()).filter(Boolean)
+    const groupId = advGroups.some(g => g.id === advAddGroupId) ? advAddGroupId : advGroups[0]?.id
+    if (!names.length || !groupId) return
+    const existingNames = new Set(advEntries.map(e => e.name))
+    const toAdd = names
+      .filter(n => !existingNames.has(n))
+      .map(n => ({ id: `adv-entry-${Date.now()}-${Math.random().toString(36).slice(2)}`, name: n, groupId }))
+    if (!toAdd.length) return
+    setAdvEntries(prev => [...prev, ...toAdd])
+    setAdvInputValue('')
+  }
+
+  function handleAdvancedSelect() {
+    if (animating) return
+    if (advPool.length === 0) return
+    const pick = advPool[Math.floor(Math.random() * advPool.length)]
+
+    if (opts.theme === 'fortune-wheel') {
+      const allNames = advEntries.filter(e => advActiveGroupIds.includes(e.groupId)).map(e => e.name)
+      const targetIndex = allNames.indexOf(pick)
+      setWheelSpinTarget({ pick, targetIndex, spinning: true })
+      setAnimating(true)
+      if (opts.biggerSelectDisplay) setBiggerDisplayOpen(true)
+      return
+    }
+
+    if (opts.biggerSelectDisplay) setBiggerDisplayOpen(true)
+    const rand = () => advPool[Math.floor(Math.random() * advPool.length)]
+    skipRef.current = false
+
+    function finish() {
+      skipRef.current = false
+      setSelected(pick)
+      setAnimating(false)
+      if (opts.removeAfterSelected) {
+        setAdvEntries(prev => prev.filter(e => e.name !== pick))
+        setAdvPreviouslySelected(prev => [...prev, pick])
+      } else if (!opts.allowDuplicates) {
+        setAdvPreviouslySelected(prev => [...prev, pick])
+      }
+    }
+
+    if (opts.animation) {
+      setAnimating(true)
+      let step = 0
+      const steps = 20
+      if (opts.theme === 'slot-machine') {
+        setReels([{ tick: 0, name: rand() }, { tick: 0, name: rand() }, { tick: 0, name: rand() }])
+        function cycleSM() {
+          if (skipRef.current) {
+            setReels([{ tick: step, name: pick }, { tick: step, name: pick }, { tick: step, name: pick }])
+            finish(); return
+          }
+          step++
+          const delay = 60 + (step / steps) ** 2 * 240
+          setReels(prev => [
+            step < 14 ? { tick: step, name: rand() } : step === 14 ? { tick: step, name: pick } : prev[0],
+            step < 17 ? { tick: step, name: rand() } : step === 17 ? { tick: step, name: pick } : prev[1],
+            step < 20 ? { tick: step, name: rand() } : step === 20 ? { tick: step, name: pick } : prev[2],
+          ])
+          if (step < steps) setTimeout(cycleSM, delay)
+          else finish()
+        }
+        cycleSM()
+      } else {
+        function cycle() {
+          if (skipRef.current) { finish(); return }
+          if (step < steps) {
+            setSlotTick(t => t + 1)
+            setSelected(rand())
+            step++
+            setTimeout(cycle, 60 + (step / steps) ** 2 * 240)
+          } else { finish() }
+        }
+        cycle()
+      }
+    } else {
+      finish()
+    }
+  }
+
   function handleKeyDown(e) {
     if (e.key === 'Enter') handleAdd()
   }
@@ -632,6 +777,12 @@ export default function App() {
   const pool = opts.allowDuplicates
     ? people
     : people.filter((p) => !previouslySelected.includes(p))
+
+  const isAdvanced = activeTab === 3
+  const advPool = advEntries
+    .filter(e => advActiveGroupIds.includes(e.groupId))
+    .map(e => e.name)
+    .filter(name => opts.allowDuplicates || !advPreviouslySelected.includes(name))
 
   const isPrizeMode = opts.mode === 'prize-giving'
   const isFortuneWheel = opts.theme === 'fortune-wheel'
@@ -684,6 +835,7 @@ export default function App() {
               setActiveTab(v)
               if (v === 0) { setOpts((prev) => ({ ...prev, mode: 'standard' })); setSelected(null) }
               if (v === 1) { setOpts((prev) => ({ ...prev, mode: 'prize-giving' })); setSelected(null) }
+              if (v === 3) { setOpts((prev) => ({ ...prev, mode: 'standard' })); setSelected(null) }
             }}
             variant={isMobile ? 'scrollable' : 'standard'}
             centered={!isMobile}
@@ -694,6 +846,7 @@ export default function App() {
             <Tab label="🎯 Standard" />
             <Tab label="🏆 Prize Draw" />
             <Tab label="⚙ Settings" />
+            <Tab label="🔬 Advanced" />
           </Tabs>
 
           {/* ── Main content (tabs 0-1) ── */}
@@ -759,6 +912,7 @@ export default function App() {
             </Box>
           )}
 
+          {!isAdvanced && <>
           {/* Input row */}
           <Stack direction="row" spacing={1}>
             <TextField
@@ -846,6 +1000,7 @@ export default function App() {
               </Button>
             )}
           </Box>
+          </>}
 
           {/* Result */}
           <>
@@ -920,7 +1075,7 @@ export default function App() {
               {isFortuneWheel ? (
                 <>
                   <FortuneWheel
-                    pool={pool}
+                    pool={isAdvanced ? advEntries.filter(e => advActiveGroupIds.includes(e.groupId)).map(e => e.name) : pool}
                     spinning={!!wheelSpinTarget?.spinning}
                     targetIndex={wheelSpinTarget?.targetIndex ?? null}
                     onSpinEnd={handleWheelFinish}
@@ -943,7 +1098,7 @@ export default function App() {
                   </Paper>
                 </>
               ) : !selected && !animating ? (
-                pool.length > 0 ? (
+                (isAdvanced ? advPool : pool).length > 0 ? (
                   <Paper elevation={0} sx={{
                     background: 'linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%)',
                     border: '2px solid #f9ca24', borderRadius: 3, p: 2,
@@ -1004,14 +1159,14 @@ export default function App() {
                       <Typography component="span" sx={{ fontWeight: 600 }}>Selected:</Typography>{' '}
                       <Typography component="span" sx={{ fontWeight: 700, fontSize: '1.3rem' }}>🎉 {selected}</Typography>
                     </>
-                  ) : pool.length > 0 ? (
+                  ) : (isAdvanced ? advPool : pool).length > 0 ? (
                     <Typography sx={{ color: '#9a8040', fontStyle: 'italic' }}>Ready to select…</Typography>
                   ) : null}
                 </Paper>
               )}
 
               {/* ── Standard mode: reset/redraw when all people used up ── */}
-              {!isPrizeMode && people.length === 0 && previouslySelected.length > 0 && (
+              {!isPrizeMode && !isAdvanced && people.length === 0 && previouslySelected.length > 0 && (
                 <Stack direction="row" spacing={1} justifyContent="center" sx={{ mt: 1.5 }}>
                   <Tooltip title="Clear all people and selections" arrow>
                     <Button size="small" variant="outlined" color="error" onClick={handleStandardReset} sx={{ textTransform: 'none', fontSize: '0.8rem' }}>
@@ -1094,8 +1249,8 @@ export default function App() {
             </Paper>
           )}
 
-          {/* Previously Selected (hidden in prize giving mode) */}
-          {!isPrizeMode && previouslySelected.length > 0 && (
+          {/* Previously Selected (hidden in prize giving mode and advanced mode) */}
+          {!isPrizeMode && !isAdvanced && previouslySelected.length > 0 && (
             <Box>
               <Divider sx={{ mb: 0.5 }} />
               <Button
@@ -1127,6 +1282,221 @@ export default function App() {
           )}
 
           </>}
+
+          {/* ── Advanced tab ── */}
+          {activeTab === 3 && (
+            <Stack spacing={2}>
+
+              {/* Add entry — 3 stacked lines */}
+              <Stack spacing={1}>
+                <TextField
+                  fullWidth size="small"
+                  label="Name(s)"
+                  placeholder="enter name or names separated by ;"
+                  InputLabelProps={{ shrink: true }}
+                  value={advInputValue}
+                  onChange={e => setAdvInputValue(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleAdvancedAdd() }}
+                />
+                <FormControl size="small" fullWidth>
+                  <InputLabel>Group</InputLabel>
+                  <Select
+                    value={advGroups.some(g => g.id === advAddGroupId) ? advAddGroupId : advGroups[0]?.id ?? ''}
+                    label="Group"
+                    onChange={e => setAdvAddGroupId(e.target.value)}
+                  >
+                    {advGroups.map(g => <MenuItem key={g.id} value={g.id}>{g.name}</MenuItem>)}
+                  </Select>
+                </FormControl>
+                <Button fullWidth variant="contained" onClick={handleAdvancedAdd}
+                  sx={{ bgcolor: '#667eea', '&:hover': { bgcolor: '#5570d8' } }}>
+                  Add
+                </Button>
+              </Stack>
+
+              {/* Entries list (collapsible, grouped) */}
+              <Box>
+                <Button fullWidth onClick={() => setAdvPeopleOpen(v => !v)}
+                  endIcon={<ExpandMoreIcon sx={{ transform: advPeopleOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />}
+                  sx={{ justifyContent: 'space-between', color: 'text.secondary', textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.06em', fontWeight: 600, '&:hover': { bgcolor: 'transparent' } }}>
+                  Selection Pool ({advEntries.length})
+                </Button>
+                <Collapse in={advPeopleOpen}>
+                  {advEntries.length === 0 ? (
+                    <Typography variant="body2" sx={{ color: 'text.disabled', textAlign: 'center', py: 1 }}>
+                      No entries added yet.
+                    </Typography>
+                  ) : (
+                    <List dense disablePadding sx={{ mt: 0.5 }}>
+                      {advEntries.map(entry => {
+                        const group = advGroups.find(g => g.id === entry.groupId)
+                        return (
+                          <ListItem key={entry.id}
+                            sx={{ bgcolor: '#f7f7fb', borderRadius: 2, mb: 0.5,
+                              opacity: (!opts.allowDuplicates && advPreviouslySelected.includes(entry.name)) ? 0.45 : 1 }}
+                            secondaryAction={
+                              <IconButton size="small" onClick={() => setAdvEntries(prev => prev.filter(e => e.id !== entry.id))}>
+                                <CloseIcon fontSize="small" />
+                              </IconButton>
+                            }>
+                            <ListItemText
+                              primary={entry.name}
+                              secondary={group?.name}
+                              secondaryTypographyProps={{ variant: 'caption', sx: { color: '#9a7acd' } }}
+                            />
+                          </ListItem>
+                        )
+                      })}
+                    </List>
+                  )}
+                </Collapse>
+              </Box>
+
+              {/* Group filter — multi-select which groups to draw from */}
+              <FormControl size="small" fullWidth>
+                <InputLabel>Draw from groups</InputLabel>
+                <Select
+                  multiple
+                  value={advActiveGroupIds}
+                  label="Draw from groups"
+                  onChange={e => setAdvActiveGroupIds(e.target.value)}
+                  renderValue={selected =>
+                    advGroups.filter(g => selected.includes(g.id)).map(g => g.name).join(', ')
+                  }
+                >
+                  {advGroups.map(g => (
+                    <MenuItem key={g.id} value={g.id}>
+                      <Checkbox checked={advActiveGroupIds.includes(g.id)} size="small" />
+                      <ListItemText primary={g.name} />
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              {/* Select button */}
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                <Button variant="contained" size="large"
+                  disabled={advPool.length === 0 || animating}
+                  onClick={handleAdvancedSelect}
+                  sx={{
+                    background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                    borderRadius: '50px', px: 4, fontSize: '1.1rem',
+                    boxShadow: '0 4px 15px rgba(240,100,120,0.4)',
+                    '&:hover': { background: 'linear-gradient(135deg, #e080f0 0%, #e04460 100%)' },
+                    '&.Mui-disabled': { background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', opacity: 0.4, color: 'white' },
+                  }}>
+                  🎲 Select!
+                </Button>
+                {animating && (
+                  <Button size="small" onClick={handleSkip} sx={{ color: 'text.secondary', textTransform: 'none', fontSize: '0.75rem' }}>
+                    ⏭ Skip animation
+                  </Button>
+                )}
+              </Box>
+
+              {/* Previously selected */}
+              {advPreviouslySelected.length > 0 && (
+                <Box>
+                  <Divider sx={{ mb: 0.5 }} />
+                  <Button fullWidth onClick={() => setAdvPrevOpen(v => !v)}
+                    endIcon={<ExpandMoreIcon sx={{ transform: advPrevOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />}
+                    sx={{ justifyContent: 'space-between', color: 'text.secondary', textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.06em', fontWeight: 600, '&:hover': { bgcolor: 'transparent' } }}>
+                    Previously Selected ({advPreviouslySelected.length})
+                  </Button>
+                  <Collapse in={advPrevOpen}>
+                    <List dense disablePadding sx={{ mt: 0.5 }}>
+                      {advPreviouslySelected.map((name, i) => (
+                        <ListItem key={i}
+                          sx={{ bgcolor: '#f0f0f0', borderRadius: 2, mb: 0.5, opacity: 0.7 }}
+                          secondaryAction={
+                            <IconButton size="small" onClick={() => {
+                              setAdvPreviouslySelected(prev => prev.filter((_, j) => j !== i))
+                            }}>
+                              <AddIcon fontSize="small" />
+                            </IconButton>
+                          }>
+                          <ListItemText primary={name} primaryTypographyProps={{ color: 'text.secondary' }} />
+                        </ListItem>
+                      ))}
+                    </List>
+                  </Collapse>
+                </Box>
+              )}
+
+              {/* Groups management panel */}
+              <Paper variant="outlined" sx={{ borderRadius: 2, p: 1.5, borderColor: '#d4c5f9', background: '#f5f0ff' }}>
+                <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+                  <Typography variant="caption" sx={{ color: '#6a5acd', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                    Groups
+                  </Typography>
+                  {advGroupEditMode ? (
+                    <IconButton size="small" onClick={() => setAdvGroupEditMode(false)} sx={{ color: '#6a5acd' }}>
+                      <LockIcon fontSize="small" />
+                    </IconButton>
+                  ) : (
+                    <IconButton size="small" onClick={() => setAdvGroupEditMode(true)} sx={{ color: '#6a5acd' }}>
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                  )}
+                </Stack>
+                {advGroupEditMode ? (
+                  <>
+                    <Stack spacing={0.75}>
+                      {advGroups.map(g => (
+                        <Stack key={g.id} direction="row" spacing={1} alignItems="center">
+                          <TextField size="small" value={g.name} sx={{ flex: 1 }}
+                            onChange={e => setAdvGroups(prev => prev.map(x => x.id === g.id ? { ...x, name: e.target.value } : x))} />
+                          <IconButton size="small"
+                            disabled={advGroups.length <= 1}
+                            onClick={() => {
+                              setAdvGroups(prev => prev.filter(x => x.id !== g.id))
+                              setAdvActiveGroupIds(prev => prev.filter(id => id !== g.id))
+                              setAdvEntries(prev => prev.filter(e => e.groupId !== g.id))
+                              if (advAddGroupId === g.id) setAdvAddGroupId(advGroups.find(x => x.id !== g.id)?.id ?? null)
+                            }}>
+                            <CloseIcon fontSize="small" />
+                          </IconButton>
+                        </Stack>
+                      ))}
+                    </Stack>
+                    <Button size="small" startIcon={<AddIcon />}
+                      onClick={() => {
+                        const newId = `grp-${Date.now()}`
+                        setAdvGroups(prev => [...prev, { id: newId, name: 'New Group' }])
+                        setAdvActiveGroupIds(prev => [...prev, newId])
+                      }}
+                      sx={{ mt: 1, color: '#6a5acd', textTransform: 'none' }}>
+                      Add group
+                    </Button>
+                  </>
+                ) : (
+                  <Stack spacing={0.5}>
+                    {advGroups.map(g => (
+                      <Stack key={g.id} direction="row" spacing={1} alignItems="center" sx={{ py: 0.25 }}>
+                        <Typography sx={{ fontSize: '0.9rem', fontWeight: 500, color: '#3a2d6e' }}>{g.name}</Typography>
+                      </Stack>
+                    ))}
+                  </Stack>
+                )}
+              </Paper>
+
+              {/* Reset button */}
+              <Button color="error" size="small"
+                sx={{ alignSelf: 'flex-start', textTransform: 'none' }}
+                onClick={() => {
+                  setAdvEntries([])
+                  setAdvPreviouslySelected([])
+                  setAdvSelected(null)
+                  setAdvGroups(DEFAULT_ADVANCED_GROUPS)
+                  setAdvActiveGroupIds(DEFAULT_ADVANCED_GROUPS.map(g => g.id))
+                  setAdvAddGroupId(DEFAULT_ADVANCED_GROUPS[0].id)
+                  setSelected(null)
+                }}>
+                ↺ Reset advanced data
+              </Button>
+
+            </Stack>
+          )}
 
           {/* ── Settings tab ── */}
           {activeTab === 2 && (
